@@ -54,4 +54,4 @@ sudo node adapter.js
 
 ## 📜 架構決策紀錄 (ADR)
 詳細的系統設計與技術選型考量，請參閱：
-* [ADR-001: Hybrid Architecture for Safety-Critical Edge Systems](./decisions/ADR-001.md)
+* [ADR-001: Hybrid Architecture for Safety-Critical Edge Systems](decisions/ADR-001-hybrid-architecture.md)
