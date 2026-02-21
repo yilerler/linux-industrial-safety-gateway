@@ -126,7 +126,7 @@ setInterval(() => {
     } catch (e) {
         console.error(`[Error] Aggregation failed:`, e.message);
     }
-}, 1000); // 1秒更新一次戰情板數據
+}, 200); // 0.2秒更新一次戰情板數據
 
 // 優雅退出 (保留)
 process.on('SIGINT', () => {

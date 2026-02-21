@@ -11,6 +11,7 @@
 
 #define DEVICE_NAME "mock_sensor"
 #define CLASS_NAME  "mock_class" // 新增：裝置類別名稱
+#define FILTER_WINDOW_SIZE 5  // 滑動平均濾波器的視窗大小 (取最近5次平均)
 
 struct mock_sensor_dev {
     struct cdev cdev;
@@ -21,46 +22,76 @@ struct mock_sensor_dev {
     struct class *dev_class;
     struct device *dev_device;
     int direction; // 新增：0 = 遠離中, 1 = 靠近中
+    int filter_history[FILTER_WINDOW_SIZE]; // 儲存最近 N 次的原始數據
+    int filter_index;                       // 環形緩衝區的當前指標
 };
 
 static dev_t dev_num;
 static struct mock_sensor_dev *my_dev;
 
+// 🌊 工業級滑動平均濾波器 (Moving Average Filter)
+static int apply_moving_average(struct mock_sensor_dev *dev, int raw_val)
+{
+    int i;
+    long sum = 0;
+
+    // 1. 將新數據寫入環形緩衝區
+    dev->filter_history[dev->filter_index] = raw_val;
+
+    // 2. 更新指標位置
+    dev->filter_index = (dev->filter_index + 1) % FILTER_WINDOW_SIZE;
+
+    // 3. 計算平均值
+    for (i = 0; i < FILTER_WINDOW_SIZE; i++) {
+        sum += dev->filter_history[i];
+    }
+
+    return (int)(sum / FILTER_WINDOW_SIZE);
+}
+
 // --- Timer Function ---
 static void mock_hardware_timer_func(struct timer_list *t) {
     struct mock_sensor_dev *dev = from_timer(dev, t, timer);
     int noise;
+    
+    // 新增：用來記錄「物理世界」的真實原始距離，而不是直接改 dev->data.distance_mm
+    static int raw_physical_distance = 100; 
+    int filtered_distance;
 
     mutex_lock(&dev->lock);
     
     // 產生一點雜訊
     noise = (int)(jiffies % 5);
 
-    // --- 1. 物理現象模擬邏輯 ---
+    // --- 1. 物理現象模擬邏輯 (產生 Raw Data) ---
     if (dev->direction == 0) { 
         // 遠離中
-        dev->data.distance_mm += (15 + noise);
-        if (dev->data.distance_mm >= 400) {
-            dev->data.distance_mm = 400;
+        raw_physical_distance += (15 + noise);
+        if (raw_physical_distance >= 400) {
+            raw_physical_distance = 400;
             dev->direction = 1; // 折返
         }
     } else {
         // 靠近中
-        dev->data.distance_mm -= (15 + noise);
-        if (dev->data.distance_mm <= 5) {
-            dev->data.distance_mm = 5;
+        raw_physical_distance -= (15 + noise);
+        if (raw_physical_distance <= 5) {
+            raw_physical_distance = 5;
             dev->direction = 0; // 折返
         }
     }
 
-    // --- 2. 保命急停邏輯 ---
-    if (dev->data.distance_mm < 10) {
-        dev->data.status_code = STATUS_EMERGENCY_STOP; // 狀態碼設為 1
-        
-        // 模擬硬體瞬間斷電！
+    // --- 2. 核心：經過滑動平均濾波器清洗數據 ---
+    filtered_distance = apply_moving_average(dev, raw_physical_distance);
+
+    // 將清洗後的乾淨數據存入結構體，準備給 User Space 讀取
+    dev->data.distance_mm = filtered_distance;
+
+    // --- 3. 保命急停邏輯 (基於清洗後的數據) ---
+    if (dev->data.distance_mm < 100) {
+        dev->data.status_code = STATUS_EMERGENCY_STOP;
         printk(KERN_EMERG "Mock Sensor: [SAFETY CRITICAL] Distance < 10mm! MOTOR STOPPED!\n");
     } else {
-        dev->data.status_code = STATUS_NORMAL; // 狀態碼設為 0
+        dev->data.status_code = STATUS_NORMAL;
     }
 
     dev->data.timestamp = jiffies;
@@ -129,6 +160,9 @@ static int __init mock_sensor_init(void) {
         return -ENOMEM;
     }
 
+    memset(my_dev->filter_history, 0, sizeof(my_dev->filter_history));
+    my_dev->filter_index = 0;
+    
     mutex_init(&my_dev->lock);
     timer_setup(&my_dev->timer, mock_hardware_timer_func, 0);
 
