@@ -1,6 +1,7 @@
-# 🚀 Embedded Hybrid Architecture Scaffold (嵌入式異質架構整合骨架)
+# 🏭 Industrial IT/OT Safety Gateway (基於 Linux Kernel 之工業級安全閘道器)
 
-> **一句話簡介：** 專為高可靠度 IoT 邊緣閘道器 (Edge Gateway) 設計的系統骨架。透過分離 Linux Kernel Space (硬即時控制) 與 User Space (業務邏輯)，解決傳統單一腳本控制硬體時缺乏確定性 (Determinism) 與故障隔離 (Fail-Safe) 的致命痛點。
+> **一句話簡介：** 專為 **工業人機協作 (HRC)** 與 **高可靠度邊緣運算 (Edge Computing)** 設計的軟體定義閘道器 (Software-Defined Gateway) 與虛擬感測中樞 (Virtual Sensor Hub)。
+> 透過分離 Linux Kernel Space (硬即時控制與邊緣濾波) 與 User Space (通訊協議轉換)，解決傳統單一架構無法兼顧「IT 雲端大數據聚合」與「OT 底層極低延遲防護 (Fail-Safe)」的業界痛點。
 
 ## 🏗️ 系統架構 (System Architecture)
 
@@ -53,6 +54,7 @@
 ⚙️  [OT-Layer] Industrial Hex Payload (6 Bytes)
 📡 UART TX -> [ 0xAA 0x01 0x00 0xC1 0x00 0x6C ]
 ======================================================
+```
 
 ## 🚀 快速啟動 (Getting Started)
 
