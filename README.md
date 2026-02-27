@@ -37,7 +37,7 @@ flowchart TD
         
         Sensors -->|中斷 / 輪詢| DSP
         DSP -->|乾淨數據| FailSafe
-        FailSafe -. 絕對優先權 .->|強制斷電| Motor
+        FailSafe -.->|絕對優先權: 強制斷電| Motor
     end
 
     subgraph Contract["⚖️ 系統邊界 (System Boundary)"]
