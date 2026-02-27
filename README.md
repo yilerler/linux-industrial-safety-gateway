@@ -62,7 +62,7 @@ flowchart TD
         Translator -->|JSON 大數據<br>~190 Bytes| IT
         Translator -->|Hex Protocol + Checksum<br>極簡 6 Bytes| OT
     end
-
+```
 ## ✨ 核心工程價值 (Key Features)
 
 * 🛡️ **工安級隔離 (Safety-Critical Isolation):** 保命邏輯直接在 Kernel Timer 內反射觸發，實作零延遲的硬體防護。
