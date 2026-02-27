@@ -5,17 +5,7 @@
 
 ## 🏗️ 系統架構 (System Architecture)
 
-本專案採用三層式異質運算架構：
-
-1. **L1 / 核心控制層 (Kernel Space - C 語言):**
-   * 負責硬即時任務（如：電子圍籬感測、馬達強制斷電）。
-   * 具備 **Fail-Safe** 獨立運作能力，不受上層系統負載影響。
-2. **L2 / 業務邏輯層 (User Space - Node.js):**
-   * 透過 `ioctl` 介面與底層通訊。
-   * 負責非即時任務（如：空品/噪音監測、門禁 RFID 驗證）。
-   * 擔任資料聚合器 (Data Aggregator)，打包系統狀態。
-3. **L3 / 雲端戰情層 (Cloud Space):**
-   * 接收結構化的 JSON Payload，渲染監控儀表板。
+本專案採用三層式異質運算架構，展示「軟體定義硬體」與「IT/OT 解耦」的設計哲學：
 
 ```mermaid
 flowchart TD
