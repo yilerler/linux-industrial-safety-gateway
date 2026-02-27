@@ -17,6 +17,52 @@
 3. **L3 / 雲端戰情層 (Cloud Space):**
    * 接收結構化的 JSON Payload，渲染監控儀表板。
 
+```mermaid
+flowchart TD
+    %% Define Styles
+    classDef hardware fill:#e0e0e0,stroke:#333,stroke-width:2px,color:#000
+    classDef kernel fill:#f9d0c4,stroke:#e06666,stroke-width:2px,color:#000
+    classDef user fill:#cfe2f3,stroke:#6fa8dc,stroke-width:2px,color:#000
+    classDef external fill:#d9ead3,stroke:#93c47d,stroke-width:2px,color:#000
+    classDef boundary fill:#fff2cc,stroke:#d6b656,stroke-width:2px,stroke-dasharray: 5 5,color:#000
+
+    subgraph Physical["⚙️ 實體物理層 (Hardware / Environment)"]
+        Sensors[感測器陣列<br>原始訊號 & 高頻雜訊]:::hardware
+        Motor[馬達控制器<br>實體致動器]:::hardware
+    end
+
+    subgraph Kernel["🛡️ Linux 核心層 (Kernel Space - Hard Real-Time)"]
+        DSP[DSP 訊號清洗<br>Moving Average Filter]:::kernel
+        FailSafe[保命急停邏輯<br>Fail-Safe Engine]:::kernel
+        
+        Sensors -->|中斷 / 輪詢| DSP
+        DSP -->|乾淨數據| FailSafe
+        FailSafe -. 絕對優先權 .->|強制斷電| Motor
+    end
+
+    subgraph Contract["⚖️ 系統邊界 (System Boundary)"]
+        IOCTL((ioctl 合約<br>sensor_ioctl.h)):::boundary
+    end
+
+    subgraph User["🧠 應用業務層 (User Space - Node.js)"]
+        Adapter[Edge Gateway<br>adapter.js]:::user
+        Aggregator[次要數據聚合<br>空品 / 噪音 / 門禁]:::user
+        Translator[通訊協議翻譯官<br>Protocol Translator]:::user
+
+        FailSafe -->|狀態提取| IOCTL
+        IOCTL --> Adapter
+        Adapter <--> Aggregator
+        Adapter --> Translator
+    end
+
+    subgraph External["🌍 外部系統 (External Integration)"]
+        IT[☁️ 雲端戰情室<br>IT System]:::external
+        OT[📠 傳統工業控制器<br>OT System / PLC]:::external
+
+        Translator -->|JSON 大數據<br>~190 Bytes| IT
+        Translator -->|Hex Protocol + Checksum<br>極簡 6 Bytes| OT
+    end
+
 ## ✨ 核心工程價值 (Key Features)
 
 * 🛡️ **工安級隔離 (Safety-Critical Isolation):** 保命邏輯直接在 Kernel Timer 內反射觸發，實作零延遲的硬體防護。
