@@ -27,10 +27,9 @@
 ## 4. 後果 (Consequences)
 
 * **優點 (Positive):**
-* **邊緣自洽 (Edge Autonomy):** 達成零 WAN 網路依賴。只要廠區區域網路 (LAN) 正常，戰情室即可運作。
-* **心理防呆 (Psychological Fail-Safe):** 將 UI 從單純的「觀測器」，轉變為斷線時控制人類預期心理的「指揮官」，完美對齊人機迴圈 (Human-in-the-loop) 的安全設計。
-* **架構展示 (Architecture Proof):** 斷線降級的畫面，成為 IT/OT 解耦最直接的火力展示。
-
+  * **邊緣自洽 (Edge Autonomy):** 達成零 WAN 網路依賴。只要廠區區域網路 (LAN) 正常，戰情室即可運作。
+  * **心理防呆 (Psychological Fail-Safe):** 將 UI 從單純的「觀測器」，轉變為斷線時控制人類預期心理的「指揮官」，完美對齊人機迴圈 (Human-in-the-loop) 的安全設計。
+  * **架構展示 (Architecture Proof):** 斷線降級的畫面，成為 IT/OT 解耦最直接的火力展示。
 
 * **缺點/妥協 (Negative):**
-* 增加了 Edge Gateway 的運算負擔（`adapter.js` 需同時處理 ioctl、協定轉換與 WebSocket 連線管理），需密切監控 Node.js 的 Event Loop 阻塞狀況。
+  * 增加了 Edge Gateway 的運算負擔（`adapter.js` 需同時處理 ioctl、協定轉換與 WebSocket 連線管理），需密切監控 Node.js 的 Event Loop 阻塞狀況。
