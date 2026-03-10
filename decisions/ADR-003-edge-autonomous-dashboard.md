@@ -21,7 +21,7 @@
 2. **事件驅動推播：** 引入 WebSocket (`ws`) 建立雙向通道。Gateway 取得新數據後，主動推播 (Push) 給瀏覽器，將觀測延遲降至最低。
 3. **優雅降級與 SOP 牧羊犬機制 (Graceful Degradation)：**
    * 前端實作 Watchdog Timer（看門狗計時器）。若 3 秒未收到 WebSocket 心跳，畫面**不顯示紅色警報**，而是轉為冷靜的灰/黃色調。
-   * * 畫面凍結於「最後已知安全狀態 (Last Known Good State)」，並強制顯示 SOP 指引：「*IT 連線中斷。請勿靠近機台，底層 OT 實體防護仍獨立運作中。*」
+   * 畫面凍結於「最後已知安全狀態 (Last Known Good State)」，並強制顯示 SOP 指引：「*IT 連線中斷。請勿靠近機台，底層 OT 實體防護仍獨立運作中。*」
 
 
 
