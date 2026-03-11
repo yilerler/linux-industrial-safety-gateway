@@ -60,45 +60,37 @@ static void mock_hardware_timer_func(struct timer_list *t) {
 
     mutex_lock(&dev->lock);
     
-    // 產生一點雜訊
-    noise = (int)(jiffies % 5);
+    // 產生一點雜訊 (放大雜訊比例，讓 UI 上的數字跳動更真實)
+    noise = (int)(jiffies % 5) * 10;
 
     // --- 1. 物理現象模擬邏輯 (產生 Raw Data) ---
     if (dev->direction == 0) { 
-        // 遠離中
-        raw_physical_distance += (15 + noise);
-        if (raw_physical_distance >= 400) {
-            raw_physical_distance = 400;
+        // 遠離中 (每 0.1 秒移動約 5~9 公分)
+        raw_physical_distance += (50 + noise);
+        if (raw_physical_distance >= 3500) { // 上限改為 3.5 公尺 (3500 mm)
+            raw_physical_distance = 3500;
             dev->direction = 1; // 折返
         }
     } else {
         // 靠近中
-        raw_physical_distance -= (15 + noise);
-        if (raw_physical_distance <= 5) {
-            raw_physical_distance = 5;
+        raw_physical_distance -= (50 + noise);
+        if (raw_physical_distance <= 500) {  // 下限改為 0.5 公尺 (500 mm)，讓它一定會衝過紅線
+            raw_physical_distance = 500;
             dev->direction = 0; // 折返
         }
     }
 
     // --- 2. 核心：經過滑動平均濾波器清洗數據 ---
     filtered_distance = apply_moving_average(dev, raw_physical_distance);
-
-    // 將清洗後的乾淨數據存入結構體，準備給 User Space 讀取
     dev->data.distance_mm = filtered_distance;
 
     // --- 3. 保命急停邏輯 (基於清洗後的數據) ---
-    if (dev->data.distance_mm < 100) {
+    // ⚠️ 工業級紅線：小於 1000 mm (1 公尺) 強制斷電！
+    if (dev->data.distance_mm < 1000) {
         dev->data.status_code = STATUS_EMERGENCY_STOP;
-        printk(KERN_EMERG "Mock Sensor: [SAFETY CRITICAL] Distance < 10mm! MOTOR STOPPED!\n");
+        printk(KERN_EMERG "Mock Sensor: [SAFETY CRITICAL] Distance < 1000mm! MOTOR STOPPED!\n");
     } else {
         dev->data.status_code = STATUS_NORMAL;
-    }
-
-    dev->data.timestamp = jiffies;
-    mutex_unlock(&dev->lock);
-
-    if (dev->is_active) {
-        mod_timer(&dev->timer, jiffies + msecs_to_jiffies(100));
     }
 }
 

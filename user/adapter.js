@@ -1,5 +1,41 @@
 const fs = require('fs');
+const path = require('path');
 const ioctl = require('ioctl-napi');
+
+// --- [NEW] 伺服器模組引入 (Server Modules) ---
+const express = require('express');
+const { WebSocketServer } = require('ws');
+const http = require('http');
+
+// 建立 Express 應用程式與 HTTP 伺服器
+const app = express();
+const server = http.createServer(app);
+
+// 設定靜態檔案託管：將 public 資料夾對外開放
+// 這樣當我們連線到 http://localhost:3000 時，就能看到 index.html
+app.use(express.static(path.join(__dirname, 'public')));
+
+// 建立 WebSocket 伺服器，並綁定到剛剛的 HTTP 伺服器上
+const wss = new WebSocketServer({ server });
+
+wss.on('connection', function connection(ws) {
+  console.log('🌐 [WebUI] A new dashboard client connected!');
+  
+  // 當收到前端傳來的訊息時（目前雖然用不到，但保留擴充性）
+  ws.on('message', function message(data) {
+    console.log('🌐 [WebUI] received: %s', data);
+  });
+
+  ws.on('close', () => {
+    console.log('🌐 [WebUI] Dashboard client disconnected.');
+  });
+});
+
+// 啟動伺服器，監聽 3000 port
+const PORT = 3000;
+server.listen(PORT, () => {
+    console.log(`🚀 [System] Edge Dashboard Server is running on http://localhost:${PORT}`);
+});
 
 // --- 1. 定義合約 (Contract Definition) ---
 // 必須跟 kernel/include/sensor_ioctl.h 完全一致
@@ -150,24 +186,31 @@ setInterval(() => {
             }
         };
 
+        // --- [NEW] 將 JSON 數據推播給所有連接的 Web UI ---
+        const jsonString = JSON.stringify(systemPayload);
+        
+        wss.clients.forEach(function each(client) {
+            // 檢查 client 的狀態是否為開啟 (OPEN)
+            if (client.readyState === 1) { 
+                client.send(jsonString);
+            }
+        });
+
         // 4. 業務邏輯輸出 (取代了原本單純的 console.log)
         // --- 核心展示：IT vs OT 雙軌輸出 ---
-        console.log(`\n======================================================`);
-        
-        // 【軌道一：IT 雲端層 (大數據 JSON)】
-        const jsonString = JSON.stringify(systemPayload);
-        console.log(`☁️  [IT-Layer] Cloud JSON Payload (${jsonString.length} Bytes)`);
-        console.dir(systemPayload, { depth: null, colors: true });
+        //console.log(`\n======================================================`);
 
-        // 【軌道二：OT 韌體層 (工業 Hex 封包)】
+        // 【軌道二：OT 韌體層 (工業 Hex 封包)】 - 保留 Hex 輸出以展示雙軌能力
         if (fenceData) {
             const hexBuffer = encodeHexProtocol(fenceData.distance_mm, fenceData.status);
             const hexString = formatHexString(hexBuffer);
-            console.log(`⚙️  [OT-Layer] Industrial Hex Payload (${hexBuffer.length} Bytes)`);
-            console.log(`📡 UART TX -> [ ${hexString} ]`);
+            // 只在緊急停止或特定條件下印出 Log，避免洗頻太快
+            if(fenceData.status === "EMERGENCY_STOP"){
+                 console.log(`🚨 UART TX -> [ ${hexString} ] (EMERGENCY KILLED)`);
+            }
         }
 
-        console.log(`======================================================`);
+        //console.log(`======================================================`);
 
         // 依據打包好的數據，做出業務反應
         if (fenceData && fenceData.status === "EMERGENCY_STOP") {
