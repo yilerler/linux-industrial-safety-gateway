@@ -6,7 +6,6 @@
 ## 🏗️ 系統架構 (System Architecture)
 
 本專案採用三層式異質運算架構，展示「軟體定義硬體」、「IT/OT 解耦」與「邊緣自洽」的設計哲學：
-
 ```mermaid
 flowchart TD
     %% Define Styles
@@ -52,11 +51,11 @@ flowchart TD
         OT[📠 傳統控制器<br>OT System / PLC]:::external
         UI[💻 戰情室 UI<br>Graceful Degradation]:::external
 
-        Translator -->|JSON 大數據 (~190 Bytes)| IT
-        Translator -->|Hex Protocol + Checksum (6 Bytes)| OT
-        WSServer <-->|LAN 即時推播 / Watchdog 監控| UI
+        Translator -->|JSON 大數據<br>~190 Bytes| IT
+        Translator -->|Hex + Checksum<br>6 Bytes| OT
+        WSServer <-->|LAN 即時推播<br>Watchdog 監控| UI
     end
-```
+  ```  
 ## ✨ 核心工程價值 (Key Features)
 
 * 🛡️ **工安級隔離 (Safety-Critical Isolation):** 保命邏輯直接在 Kernel Timer 內反射觸發，實作零延遲的硬體防護。
