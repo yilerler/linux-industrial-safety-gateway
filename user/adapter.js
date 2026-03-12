@@ -155,7 +155,7 @@ function readRFID() {
 
 // --- 5. 業務迴圈 (Business Loop) 系統狀態聚合 (System Aggregation) ---
 
-setInterval(() => {
+const aggregationTimer = setInterval(() => {
     try {
         // 1. 讀取高優先級 Kernel 數據 (電子圍籬)
         const ret = ioctl(fd, IOCTL_GET_DATA, buffer);
@@ -231,9 +231,39 @@ setInterval(() => {
     }
 }, 200); // 每秒更新5次戰情板數據
 
-// 優雅退出 (保留)
+// --- 優雅退出 (Graceful Shutdown) 徹底清理資源 ---
 process.on('SIGINT', () => {
-    console.log('\n[System] Closing device...');
-    fs.closeSync(fd);
-    process.exit(0);
+    console.log('\n[System] SIGINT (Ctrl+C) received. Initiating graceful shutdown...');
+    
+    // --- [新增] 1. 先停止業務迴圈，不再發起新的 ioctl 請求 ---
+    clearInterval(aggregationTimer);
+    console.log('[System] Aggregation loop stopped.');
+
+    // 2. 關閉 WebSocket 伺服器
+    if (typeof wss !== 'undefined') {
+        wss.close(() => console.log('[System] WebSocket server closed.'));
+    }
+
+    // 3. 關閉 HTTP 伺服器
+    if (typeof server !== 'undefined') {
+        server.close(() => console.log('[System] HTTP server closed.'));
+    }
+
+    // 4. 關閉硬體檔案描述符 (這時候關閉就絕對安全了)
+    if (fd !== null) {
+        try {
+            fs.closeSync(fd);
+            console.log(`[System] Device ${DEVICE_PATH} closed safely.`);
+        } catch (e) {
+            console.error(`[Error] Failed to close device: ${e.message}`);
+        }
+    }
+
+    // 防呆與退出機制保持不變...
+    setTimeout(() => {
+        console.error('[System] Shutdown took too long. Forcing exit.');
+        process.exit(1);
+    }, 3000);
+
+    setTimeout(() => process.exit(0), 500); 
 });

@@ -24,6 +24,7 @@ struct mock_sensor_dev {
     int direction; // 新增：0 = 遠離中, 1 = 靠近中
     int filter_history[FILTER_WINDOW_SIZE]; // 儲存最近 N 次的原始數據
     int filter_index;                       // 環形緩衝區的當前指標
+    int last_status;                        // 記錄上一次狀態
 };
 
 static dev_t dev_num;
@@ -53,17 +54,15 @@ static int apply_moving_average(struct mock_sensor_dev *dev, int raw_val)
 static void mock_hardware_timer_func(struct timer_list *t) {
     struct mock_sensor_dev *dev = from_timer(dev, t, timer);
     int noise;
-    
-    // 新增：用來記錄「物理世界」的真實原始距離，而不是直接改 dev->data.distance_mm
     static int raw_physical_distance = 100; 
     int filtered_distance;
 
+    // --- 1. 🔒 鎖定資源 --- 
     mutex_lock(&dev->lock);
     
-    // 產生一點雜訊 (放大雜訊比例，讓 UI 上的數字跳動更真實)
-    noise = (int)(jiffies % 5) * 10;
+    noise = (int)(jiffies % 5) * 10;    // 產生一點雜訊 (放大雜訊比例，讓 UI 上的數字跳動更真實)
 
-    // --- 1. 物理現象模擬邏輯 (產生 Raw Data) ---
+    // --- 2. 物理現象模擬邏輯 (產生 Raw Data) ---
     if (dev->direction == 0) { 
         // 遠離中 (每 0.1 秒移動約 5~9 公分)
         raw_physical_distance += (50 + noise);
@@ -80,17 +79,36 @@ static void mock_hardware_timer_func(struct timer_list *t) {
         }
     }
 
-    // --- 2. 核心：經過滑動平均濾波器清洗數據 ---
+    // --- 3. 核心：經過滑動平均濾波器清洗數據 ---
     filtered_distance = apply_moving_average(dev, raw_physical_distance);
     dev->data.distance_mm = filtered_distance;
 
-    // --- 3. 保命急停邏輯 (基於清洗後的數據) ---
-    // ⚠️ 工業級紅線：小於 1000 mm (1 公尺) 強制斷電！
+    // --- 4. 保命急停邏輯 (基於清洗後的數據) ---
     if (dev->data.distance_mm < 1000) {
         dev->data.status_code = STATUS_EMERGENCY_STOP;
-        printk(KERN_EMERG "Mock Sensor: [SAFETY CRITICAL] Distance < 1000mm! MOTOR STOPPED!\n");
+        
+        // 【狀態機】：只有從 NORMAL 跌入 EMERGENCY 時，才大喊一次
+        if (dev->last_status != STATUS_EMERGENCY_STOP) {
+            printk(KERN_EMERG "Mock Sensor: [SAFETY CRITICAL] Distance < 1000mm! MOTOR STOPPED!\n");
+            dev->last_status = STATUS_EMERGENCY_STOP;
+        }
     } else {
         dev->data.status_code = STATUS_NORMAL;
+        
+        // 【狀態機】：只有從 EMERGENCY 恢復成 NORMAL 時，才報告安全
+        if (dev->last_status != STATUS_NORMAL) {
+            printk(KERN_INFO "Mock Sensor: Distance restored to > 1000mm. Motor Ready.\n");
+            dev->last_status = STATUS_NORMAL;
+        }
+    }
+    dev->data.timestamp = jiffies;
+
+    // 5. 🔓 絕對確保解鎖！
+    mutex_unlock(&dev->lock);
+
+    // 6. 重新啟動 Timer (必須放在解鎖之後，避免自己鎖死自己)
+    if (dev->is_active) {
+        mod_timer(&dev->timer, jiffies + msecs_to_jiffies(100));
     }
 }
 
@@ -100,7 +118,9 @@ static long mock_sensor_ioctl(struct file *file, unsigned int cmd, unsigned long
     int ret = 0;
     int new_dist;
 
+    // 1. 🔒 鎖定
     mutex_lock(&dev->lock);
+
     switch (cmd) {
         case IOCTL_GET_DATA:
             if (copy_to_user((struct sensor_data *)arg, &dev->data, sizeof(struct sensor_data))) {
@@ -108,19 +128,19 @@ static long mock_sensor_ioctl(struct file *file, unsigned int cmd, unsigned long
             }
             break;
             
-        // 新增：手動設定距離 (這是為了測試！)
+       
         case IOCTL_SET_MOCK_DISTANCE:
             if (copy_from_user(&new_dist, (int *)arg, sizeof(int))) {
                 ret = -EFAULT;
             } else {
                 dev->data.distance_mm = new_dist;
-                printk(KERN_INFO "Mock Sensor: Manual distance set to %dmm\n", new_dist);
             }
             break;
 
         default:
             ret = -EINVAL;
     }
+    // 2. 🔓 絕對確保解鎖
     mutex_unlock(&dev->lock);
     return ret;
 }
@@ -187,7 +207,8 @@ static int __init mock_sensor_init(void) {
     // 3. 啟動 Timer
     my_dev->is_active = 1;
     my_dev->direction = 0; // 預設往外跑
-    my_dev->data.distance_mm = 100;
+    my_dev->data.distance_mm = 1000;
+    my_dev->last_status = 0;
     mod_timer(&my_dev->timer, jiffies + msecs_to_jiffies(100));
 
     printk(KERN_INFO "Mock Sensor: Initialized successfully with /dev/%s.\n", DEVICE_NAME);
