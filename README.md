@@ -59,22 +59,24 @@ flowchart TD
 ## ✨ 核心工程價值 (Key Features)
 
 * 🛡️ **工安級隔離 (Safety-Critical Isolation):** 保命邏輯直接在 Kernel Timer 內反射觸發，實作零延遲的硬體防護。
-* ⏱️ **確定性採樣 (Deterministic Sampling):** 擺脫 OS 排程帶來的 Jitter，確保底層每 100ms 絕對執行一次感測。
-* 🔌 **軟體定義硬體 (Software-Defined Hardware):** 嚴格定義 `sensor_ioctl.h` 合約，使邏輯層與物理硬體完全脫鉤。
-* 🚀 **虛擬化開發 (Mock-Driven Development):** 內建硬體模擬器，無須連接真實硬體即可進行架構驗證。
-* 📉 **核心級訊號清洗 (Kernel-Space DSP):** 在 Linux 驅動底層實作滑動平均濾波器 (Moving Average Filter)，於物理雜訊進入 User Space 前即時抑制，確保防護邊界的絕對穩定。
-* 🔀 **IT/OT 雙軌通訊 (Dual-Track Telemetry):** 閘道器兼具協議翻譯能力，向上發布雲端友善的 JSON 負載，向下則針對傳統控制器 (PLC/MCU) 壓制出僅 6 Bytes 且含校驗碼 (Checksum) 的工業級 Hex 封包。
+* ⏱️ **確定性採樣與防暴走 (Deterministic & State Machine):** 擺脫 OS 排程帶來的 Jitter，確保底層每 100ms 絕對執行；內建狀態機 (State Machine) 抑制 Log 風暴。
+* 🌐 **邊緣自洽戰情室 (Edge-Autonomous Dashboard):** 內建 Express 與 WebSocket 伺服器，達成零 WAN 依賴的區域網路即時可視化。
+* 🚨 **優雅降級與心理防呆 (Graceful Degradation):** 前端實作 Watchdog 看門狗，斷線時自動凍結畫面並切換為「SOP 指揮官模式」，防止人員恐慌誤操作 (Human-in-the-Loop 安全設計)。
+* 📉 **核心級訊號清洗 (Kernel-Space DSP):** 在 Linux 驅動底層實作滑動平均濾波器，於物理雜訊進入 User Space 前即時抑制，確保防護邊界的絕對穩定。
+* 🔀 **IT/OT 雙軌通訊 (Dual-Track Telemetry):** 閘道器向上發布雲端友善的 JSON 負載，向下則針對傳統控制器壓制出僅 6 Bytes 且含校驗碼 (Checksum) 的工業級 Hex 封包。
+* 🔒 **防禦性工程 (Defensive Engineering):** 嚴格的 Mutex 鎖控管防止 D-State 死鎖；內建 SIGINT 優雅退出機制 (Graceful Shutdown)，徹底消滅殭屍行程與 Socket 資源競態。
 
 ## 📂 專案結構 (Directory Structure)
 
 ```text
 .
-├── decisions/          # 架構決策紀錄 (ADR)
+├── decisions/          # 架構決策與事後剖析 (ADR & Postmortem)
 ├── kernel/             # Linux LKM 驅動原始碼
 │   ├── include/        # 跨層共享的 IOCTL 合約定義
-│   └── src/            # mock_sensor.c (保命機制與虛擬硬體)
+│   └── src/            # mock_sensor.c (保命機制、狀態機與虛擬硬體)
 └── user/               # Node.js 邊緣運算層
-    └── adapter.js      # 系統資料聚合與 API 轉發
+    ├── public/         # Vanilla JS/CSS 打造之高對比工業戰情室 UI
+    └── adapter.js      # 系統資料聚合、API 轉發與 Web 伺服器
 ```
 
 ## 🚀 系統輸出展示 (IT/OT 解耦架構)
@@ -116,3 +118,5 @@ sudo node adapter.js
 詳細的系統設計與技術選型考量，請參閱：
 * [ADR-001: 針對安全關鍵邊緣系統的混合架構](decisions/ADR-001-hybrid-architecture.md)
 * [ADR-002: 閘道器中的 IT/OT 雙軌通訊協定轉換](./decisions/ADR-002-it-ot-protocol-translation.md)
+* [ADR-003: 邊緣自洽的戰情室與人機防呆機制](decisions/ADR-003-edge-autonomous-dashboard.md)
+* [POSTMORTEM-001: 系統規模對齊與 Kernel Deadlock 事件](decisions/POSTMORTEM-001-kernel-deadlock.md)
