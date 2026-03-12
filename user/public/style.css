@@ -1,0 +1,82 @@
+/* 基礎重置與暗色工業風 */
+body {
+    background-color: #121212;
+    color: #E0E0E0;
+    font-family: 'Helvetica Neue', Arial, 'Microsoft JhengHei', sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* 連線狀態 Banner */
+.banner {
+    padding: 15px 20px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+.banner.connected { background-color: #1b5e20; color: #a5d6a7; }
+.banner.disconnected { background-color: #f57c00; color: #fff; }
+.hidden { display: none; }
+
+/* 面板排版 */
+.dashboard-container {
+    display: flex;
+    flex: 1;
+    padding: 20px;
+    gap: 20px;
+}
+.panel {
+    background-color: #1e1e1e;
+    border: 2px solid #333;
+    border-radius: 10px;
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* 距離數字與單位 */
+.distance-display {
+    font-size: 8rem;
+    font-weight: bold;
+    margin: 20px 0;
+    /* 移除寫死的顏色與光暈，交給 JS 動態賦予 */
+    /* color: #00e676; */
+    /* text-shadow: 0 0 20px rgba(0, 230, 118, 0.4); */
+}
+.unit { font-size: 2rem; color: #888; }
+
+/* 狀態徽章 */
+.status-badge {
+    padding: 15px 40px;
+    font-size: 2rem;
+    font-weight: bold;
+    border-radius: 5px;
+    letter-spacing: 2px;
+}
+.status-badge.normal { background-color: #00c853; color: black; }
+.status-badge.warning { background-color: #ffb300; color: black; }
+.status-badge.danger {
+    background-color: #d50000;
+    color: white;
+    animation: blink 0.5s infinite alternate; /* 觸發急停時閃爍 */
+}
+
+/* 斷線優雅降級模式 (Graceful Degradation) */
+.disconnected .distance-display { color: #757575; text-shadow: none; }
+.disconnected .status-badge { background-color: #757575; color: #ccc; animation: none; }
+.disconnected .panel { border-color: #f57c00; }
+
+/* 警報閃爍動畫 */
+@keyframes blink {
+    from { opacity: 1; box-shadow: 0 0 30px #d50000; }
+    to { opacity: 0.5; box-shadow: 0 0 0px #d50000; }
+}
+
+.data-list { list-style: none; padding: 0; font-size: 1.5rem; width: 100%; }
+.data-list li { margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
