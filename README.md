@@ -1,11 +1,11 @@
 # 🏭 Industrial IT/OT Safety Gateway (基於 Linux Kernel 之工業級安全閘道器)
 
 > **一句話簡介：** 專為 **工業人機協作 (HRC)** 與 **高可靠度邊緣運算 (Edge Computing)** 設計的軟體定義閘道器 (Software-Defined Gateway) 與虛擬感測中樞 (Virtual Sensor Hub)。
-> 透過分離 Linux Kernel Space (硬即時控制與邊緣濾波) 與 User Space (通訊協議轉換)，解決傳統單一架構無法兼顧「IT 雲端大數據聚合」與「OT 底層極低延遲防護 (Fail-Safe)」的業界痛點。
+> 透過分離 Linux Kernel Space (硬即時控制與邊緣濾波) 與 User Space (通訊協議轉換與戰略 UI)，解決傳統單一架構無法兼顧「IT 雲端大數據聚合」、「OT 底層極低延遲防護 (Fail-Safe)」以及「斷線時的人機防呆」的業界痛點。
 
 ## 🏗️ 系統架構 (System Architecture)
 
-本專案採用三層式異質運算架構，展示「軟體定義硬體」與「IT/OT 解耦」的設計哲學：
+本專案採用三層式異質運算架構，展示「軟體定義硬體」、「IT/OT 解耦」與「邊緣自洽」的設計哲學：
 
 ```mermaid
 flowchart TD
@@ -38,19 +38,23 @@ flowchart TD
         Adapter[Edge Gateway<br>adapter.js]:::user
         Aggregator[次要數據聚合<br>空品 / 噪音 / 門禁]:::user
         Translator[通訊協議翻譯官<br>Protocol Translator]:::user
+        WSServer[本地伺服器<br>Express + WebSocket]:::user
 
         FailSafe -->|狀態提取| IOCTL
         IOCTL --> Adapter
         Adapter <--> Aggregator
         Adapter --> Translator
+        Adapter --> WSServer
     end
 
-    subgraph External["🌍 外部系統 (External Integration)"]
-        IT[☁️ 雲端戰情室<br>IT System]:::external
-        OT[📠 傳統工業控制器<br>OT System / PLC]:::external
+    subgraph External["🌍 外部系統與人機介面 (External & HMI)"]
+        IT[☁️ 雲端系統<br>IT System]:::external
+        OT[📠 傳統控制器<br>OT System / PLC]:::external
+        UI[💻 戰情室 UI<br>Graceful Degradation]:::external
 
-        Translator -->|JSON 大數據<br>~190 Bytes| IT
-        Translator -->|Hex Protocol + Checksum<br>極簡 6 Bytes| OT
+        Translator -->|JSON 大數據 (~190 Bytes)| IT
+        Translator -->|Hex Protocol + Checksum (6 Bytes)| OT
+        WSServer <-->|LAN 即時推播 / Watchdog 監控| UI
     end
 ```
 ## ✨ 核心工程價值 (Key Features)
