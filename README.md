@@ -111,7 +111,7 @@ dmesg | tail # 驗證驅動是否存活
 ```bash
 cd user
 npm install
-sudo node adapter.js
+sudo node adapter.js # 備註：此處需 sudo 權限以存取 /dev/mock_sensor 字元設備 (Character Device)。量產環境將透過 udev rules 配置 user group 權限以符合 Least Privilege (最小權限) 原則。
 ```
 
 ## 📜 架構決策紀錄 (ADRs)
