@@ -7,12 +7,12 @@
 然而，隨著系統演進為「工業級安全閘道器 (Edge Gateway)」，此架構暴露出嚴重的物理邏輯不自洽與越權問題：
 * **越權的閘道器 (Architectural Mismatch)：** 邊緣閘道器的本質應為「網路路由器」與「通訊協定翻譯官」，絕不該在應用層自行產生或模擬 OT（營運技術）資料。
 * **失真的數位孿生 (Distorted Digital Twin)：** 在真實場景中，所有感測器訊號皆來自底層的 PLC 或微控制器。若將環境數據的讀取綁定在 Node.js 中，將無法真實模擬 Gateway 向下發起 Modbus/SPI 輪詢的底層 I/O 行為。
-* **中斷上下文的併發危險 (Interrupt Context Concurrency)： ** 在重新檢視 Kernel 核心計時器 (mod_timer) 時，我們發現原先使用互斥鎖 (mutex) 來保護共享記憶體，在軟中斷上下文 (Softirq Context) 中存在極大的排程死結 (Kernel Panic) 風險。
+* **中斷上下文的併發危險 (Interrupt Context Concurrency)：** 在重新檢視 Kernel 核心計時器 (mod_timer) 時，我們發現原先使用互斥鎖 (mutex) 來保護共享記憶體，在軟中斷上下文 (Softirq Context) 中存在極大的排程死結 (Kernel Panic) 風險。
 
 ## 3. 決策 (Decision)
 為了達成真正的關注點分離 (Separation of Concerns, SoC) 並確立閘道器的純粹性，我們決定實施 **「OT 職責下沉 (OT Responsibility Sinking)」** 架構重構：
 
-1. **建構底層暫存器映射表 (Unified Register Map)**
+1. **建構底層暫存器映射表 (Unified Register Map)：**
 將所有次要感測器的資料產生邏輯從 adapter.js 拔除，全面下放至 Kernel Space (mock_sensor.c)。擴充 ioctl 的通訊合約，使其行為等同於向底層設備讀取連續的 Modbus 暫存器區塊：
 
 ```bash
@@ -30,10 +30,10 @@ struct sensor_data {
 };
 ```
 
-2. **Middleware 純化 (Pure Translator)**
+2. **Middleware 純化 (Pure Translator)：**
 adapter.js 不再包含任何 Math.random() 等業務邏輯，蛻變為純粹的「通訊中介層」。其唯一職責是透過 ioctl 讀取上述 24 Bytes 的二進位 Buffer，解碼並轉換為 JSON Payload 後，透過 WebSocket 向上推播。
 
-3. **核心自旋鎖重構 (Spinlock Upgrade)**
+3. **核心自旋鎖重構 (Spinlock Upgrade)：**
 為配合更龐大的資料更新操作，並遵守中斷上下文「絕對不允許睡眠」的硬限制，將 mock_sensor.c 中的 mutex_lock 全面重構為中斷安全的 自旋鎖 (spin_lock_irqsave)，徹底防堵 D-State 殭屍行程與核心崩潰。
 
 ## 4. 後果 (Consequences)
