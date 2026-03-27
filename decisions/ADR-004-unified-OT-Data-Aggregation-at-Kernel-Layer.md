@@ -10,7 +10,7 @@
 * **中斷上下文的併發危險 (Interrupt Context Concurrency)： ** 在重新檢視 Kernel 核心計時器 (mod_timer) 時，我們發現原先使用互斥鎖 (mutex) 來保護共享記憶體，在軟中斷上下文 (Softirq Context) 中存在極大的排程死結 (Kernel Panic) 風險。
 
 ## 3. 決策 (Decision)
-為了達成真正的關注點分離 (Separation of Concerns, SoC) 並確立閘道器的純粹性，我們決定實施**「OT 職責下沉 (OT Responsibility Sinking)」**架構重構：
+為了達成真正的關注點分離 (Separation of Concerns, SoC) 並確立閘道器的純粹性，我們決定實施 **「OT 職責下沉 (OT Responsibility Sinking)」** 架構重構：
 
 1. **建構底層暫存器映射表 (Unified Register Map)**
 將所有次要感測器的資料產生邏輯從 adapter.js 拔除，全面下放至 Kernel Space (mock_sensor.c)。擴充 ioctl 的通訊合約，使其行為等同於向底層設備讀取連續的 Modbus 暫存器區塊：
