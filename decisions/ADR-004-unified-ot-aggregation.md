@@ -16,7 +16,7 @@
 將所有次要感測器的資料產生邏輯從 adapter.js 拔除，全面下放至 Kernel Space (mock_sensor.c)。擴充 ioctl 的通訊合約，使其行為等同於向底層設備讀取連續的 Modbus 暫存器區塊：
 
 ```bash
-C
+  C
 // 擴張後的 sensor_ioctl.h (共 24 Bytes)
 struct sensor_data {
     unsigned int timestamp;
@@ -27,8 +27,9 @@ struct sensor_data {
     int pm25;
     int noise_db;
     int rfid_card_id; // 0 代表 NO_CARD
-};
+} __attribute__((packed)); // ⚠️ 核心防禦：強制取消記憶體對齊填充
 ```
+* **ABI 記憶體佈局防禦 (ABI Memory Layout Defense)：** 為了防止 C 語言編譯器自動插入空白的填充位元組 (Padding Bytes)，導致上層 Node.js 依靠固定 Offset 讀取 Buffer 時發生記憶體偏移 (Memory Misalignment)，我們強制加上 __attribute__((packed))，確保跨語言、跨環境的二進位介面 (ABI) 達到 100% 絕對一致。
 
 2. **Middleware 純化 (Pure Translator)：**
 adapter.js 不再包含任何 Math.random() 等業務邏輯，蛻變為純粹的「通訊中介層」。其唯一職責是透過 ioctl 讀取上述 24 Bytes 的二進位 Buffer，解碼並轉換為 JSON Payload 後，透過 WebSocket 向上推播。
@@ -38,9 +39,10 @@ adapter.js 不再包含任何 Math.random() 等業務邏輯，蛻變為純粹的
 
 ## 4. 後果 (Consequences)
 * **優點 (Positive):**
-  * **物理邏輯自洽 (Physical Consistency):** 系統架構完美對齊真實工業現場。Kernel Module 扮演向下輪詢的 Modbus Polling Engine，Node.js 扮演向上的 IT 橋接器。
+  * **物理邏輯自洽 (Physical Consistency):** 系統架構對齊真實工業現場。Kernel Module 扮演向下輪詢的 Modbus Polling Engine，Node.js 扮演向上的 IT 橋接器。
   * **極致解耦 (Extreme Decoupling):** 由於嚴格遵守 API 邊界合約，此次底層資料來源的重大遷移，對前端戰情室 (dashboard.js) 達成了零程式碼修改 (Zero Code Change) 的完美無縫接軌。
   * **工安級防禦力提升 (Enhanced Safety):** 透過導入 spin_lock_irqsave，系統不僅解決了潛在的排程死結，更確保了馬達急停狀態機 (State Machine) 在高頻併發下的絕對記憶體一致性。
+  * **跨語言 ABI 穩定性 (Cross-Language ABI Stability):** 透過 __attribute__((packed))，消除了 Kernel Space (C) 與 User Space (Node.js) 之間結構體解析的模糊地帶，確立了極度嚴謹的二進位通訊合約。
 
 * **缺點/妥協 (Negative):**
   * **Kernel 開發複雜度增加:** 所有的感測器邏輯與硬體模擬都集中在 C 語言的 LKM 中，增加了除錯的困難度與核心記憶體佈局 (Memory Layout) 的維護成本。
