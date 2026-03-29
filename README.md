@@ -1,11 +1,12 @@
 # 🏭 Industrial IT/OT Safety Gateway (基於 Linux Kernel 之工業級安全閘道器)
 
-> **一句話簡介：** 專為 **工業人機協作 (HRC)** 與 **高可靠度邊緣運算 (Edge Computing)** 設計的軟體定義閘道器 (Software-Defined Gateway) 與虛擬感測中樞 (Virtual Sensor Hub)。
-> 透過分離 Linux Kernel Space (硬即時控制與邊緣濾波) 與 User Space (通訊協議轉換與戰略 UI)，解決傳統單一架構無法兼顧「IT 雲端大數據聚合」、「OT 底層極低延遲防護 (Fail-Safe)」以及「斷線時的人機防呆」的業界痛點。
+> **一句話簡介：** 專為 **工業人機協作 (HRC)** 與 **高可靠度邊緣運算 (Edge Computing)** 設計的軟體定義閘道器 (Software-Defined Gateway) 與 **邊緣邏輯控制器 (Edge Logic Controller, ELC)**。
+> 透過分離 Linux Kernel Space (硬即時控制、Modbus 輪詢與統一暫存器) 與 User Space (純粹通訊協議轉換與戰略 UI)，解決傳統單一架構無法兼顧「IT 雲端大數據聚合」、「OT 底層極低延遲防護 (Fail-Safe)」以及「斷線時的人機防呆」的業界痛點。
 
 ## 🏗️ 系統架構 (System Architecture)
 
 本專案採用三層式異質運算架構，展示「軟體定義硬體」、「IT/OT 解耦」與「邊緣自洽」的設計哲學：
+
 ```mermaid
 flowchart TD
     %% Define Styles
@@ -16,17 +17,19 @@ flowchart TD
     classDef boundary fill:#fff2cc,stroke:#d6b656,stroke-width:2px,stroke-dasharray: 5 5,color:#000
 
     subgraph Physical["⚙️ 實體物理層 (Hardware / Environment)"]
-        Sensors[感測器陣列<br>原始訊號 & 高頻雜訊]:::hardware
+        Sensors[實體感測器 / PLC<br>原始物理訊號]:::hardware
         Motor[馬達控制器<br>實體致動器]:::hardware
     end
 
-    subgraph Kernel["🛡️ Linux 核心層 (Kernel Space - Hard Real-Time)"]
-        DSP[DSP 訊號清洗<br>Moving Average Filter]:::kernel
-        FailSafe[保命急停邏輯<br>Fail-Safe Engine]:::kernel
+    subgraph Kernel["🛡️ Linux 核心層 (Kernel Space - Hard Real-Time ELC)"]
+        HAL[南向硬體抽象層<br>Hardware Abstraction Layer]:::kernel
+        ELC[Modbus 輪詢引擎 & DSP<br>工安急停狀態機]:::kernel
+        RegMap[(統一暫存器地圖<br>Packed Register Map)]:::kernel
         
-        Sensors -->|中斷 / 輪詢| DSP
-        DSP -->|乾淨數據| FailSafe
-        FailSafe -.->|絕對優先權: 強制斷電| Motor
+        Sensors -->|實體 I/O| HAL
+        HAL -->|原始數據| ELC
+        ELC -->|乾淨數據| RegMap
+        ELC -.->|絕對優先權: 強制斷電| Motor
     end
 
     subgraph Contract["⚖️ 系統邊界 (System Boundary)"]
@@ -34,14 +37,12 @@ flowchart TD
     end
 
     subgraph User["🧠 應用業務層 (User Space - Node.js)"]
-        Adapter[Edge Gateway<br>adapter.js]:::user
-        Aggregator[次要數據聚合<br>空品 / 噪音 / 門禁]:::user
+        Adapter[純粹中介層<br>Middleware Adapter]:::user
         Translator[通訊協議翻譯官<br>Protocol Translator]:::user
         WSServer[本地伺服器<br>Express + WebSocket]:::user
 
-        FailSafe -->|狀態提取| IOCTL
-        IOCTL --> Adapter
-        Adapter <--> Aggregator
+        RegMap -->|O(1) 深拷貝| IOCTL
+        IOCTL -->|24 Bytes 記憶體映射| Adapter
         Adapter --> Translator
         Adapter --> WSServer
     end
@@ -55,16 +56,16 @@ flowchart TD
         Translator -->|Hex + Checksum<br>6 Bytes| OT
         WSServer <-->|LAN 即時推播<br>Watchdog 監控| UI
     end
-  ```  
-## ✨ 核心工程價值 (Key Features)
+```
 
-* 🛡️ **工安級隔離 (Safety-Critical Isolation):** 保命邏輯直接在 Kernel Timer 內反射觸發，實作零延遲的硬體防護。
-* ⏱️ **確定性採樣與防暴走 (Deterministic & State Machine):** 擺脫 OS 排程帶來的 Jitter，確保底層每 100ms 絕對執行；內建狀態機 (State Machine) 抑制 Log 風暴。
+## ✨ 核心工程價值 (Key Features)
+* 🗄️ **邊緣邏輯控制器 (Edge Logic Controller):** 捨棄 User Space 的資料造假，將 Linux Kernel 轉化為底層輪詢大腦。在 Kernel 建立統一的「暫存器映射表 (Register Map)」，達成感測器 Input Register 與馬達 Coil 的硬體級聯鎖 (Hardware Interlock)。
+* 🔒 **中斷上下文防禦 (Interrupt Context Safety):** 洞察 mod_timer 軟中斷無法睡眠的底層限制，將互斥鎖全面重構為 自旋鎖 (spin_lock_irqsave)，徹底消滅 Kernel Panic 隱患，確保硬即時狀態機的記憶體一致性。
+* 🛡️ **跨層 ABI 記憶體防禦 (Cross-Language ABI Stability):** 透過在 C 結構體導入 __attribute__((packed))，強制剝奪編譯器的記憶體對齊填充 (Padding)，確保底層核心與上層 Node.js 依靠 Fixed Offset 讀取 Buffer 時的絕對一致性。
 * 🌐 **邊緣自洽戰情室 (Edge-Autonomous Dashboard):** 內建 Express 與 WebSocket 伺服器，達成零 WAN 依賴的區域網路即時可視化。
+
 * 🚨 **優雅降級與心理防呆 (Graceful Degradation):** 前端實作 Watchdog 看門狗，斷線時自動凍結畫面並切換為「SOP 指揮官模式」，防止人員恐慌誤操作 (Human-in-the-Loop 安全設計)。
-* 📉 **核心級訊號清洗 (Kernel-Space DSP):** 在 Linux 驅動底層實作滑動平均濾波器，於物理雜訊進入 User Space 前即時抑制，確保防護邊界的絕對穩定。
 * 🔀 **IT/OT 雙軌通訊 (Dual-Track Telemetry):** 閘道器向上發布雲端友善的 JSON 負載，向下則針對傳統控制器壓制出僅 6 Bytes 且含校驗碼 (Checksum) 的工業級 Hex 封包。
-* 🔒 **防禦性工程 (Defensive Engineering):** 嚴格的 Mutex 鎖控管防止 D-State 死鎖；內建 SIGINT 優雅退出機制 (Graceful Shutdown)，徹底消滅殭屍行程與 Socket 資源競態。
 
 ## 📂 專案結構 (Directory Structure)
 
@@ -72,11 +73,11 @@ flowchart TD
 .
 ├── decisions/          # 架構決策與事後剖析 (ADR & Postmortem)
 ├── kernel/             # Linux LKM 驅動原始碼
-│   ├── include/        # 跨層共享的 IOCTL 合約定義
-│   └── src/            # mock_sensor.c (保命機制、狀態機與虛擬硬體)
+│   ├── include/        # 跨層共享的 IOCTL 暫存器合約定義
+│   └── src/            # mock_elc_core.c (HAL、保命機制、自旋鎖與狀態機)
 └── user/               # Node.js 邊緣運算層
     ├── public/         # Vanilla JS/CSS 打造之高對比工業戰情室 UI
-    └── adapter.js      # 系統資料聚合、API 轉發與 Web 伺服器
+    └── adapter.js      # 純粹中介層：記憶體映射解析、API 轉發與 Web 伺服器
 ```
 
 ## 🚀 系統輸出展示 (IT/OT 解耦架構)
@@ -93,7 +94,7 @@ flowchart TD
   access_subsystem: { last_scan: 'NO_CARD' }
 }
 ⚙️  [OT-Layer] Industrial Hex Payload (6 Bytes)
-📡 UART TX -> [ 0xAA 0x01 0x00 0xC1 0x00 0x6C ]
+🚨 [ALARM] MOTOR OFFLINE! OT-UART TX -> [ 0xAA 0x01 0x00 0xC1 0x01 0x6D ]
 ======================================================
 ```
 
@@ -103,15 +104,15 @@ flowchart TD
 ```bash
 cd kernel
 make
-sudo insmod src/mock_sensor.ko
-dmesg | tail # 驗證驅動是否存活
+sudo insmod src/mock_elc_core.ko
+dmesg | tail # 驗證驅動與 ELC 輪詢引擎是否存活
 ```
 
 **2. 啟動邊緣聚合器 (User Space)**
 ```bash
 cd user
 npm install
-sudo node adapter.js # 備註：此處需 sudo 權限以存取 /dev/mock_sensor 字元設備 (Character Device)。量產環境將透過 udev rules 配置 user group 權限以符合 Least Privilege (最小權限) 原則。
+sudo node adapter.js # 備註：此處需 sudo 權限以存取 /dev/mock_elc 字元設備。量產環境將透過 udev rules 配置權限以符合最小權限原則。
 ```
 
 ## 📜 架構決策紀錄 (ADRs)
@@ -119,4 +120,5 @@ sudo node adapter.js # 備註：此處需 sudo 權限以存取 /dev/mock_sensor 
 * [ADR-001: 針對安全關鍵邊緣系統的混合架構](decisions/ADR-001-hybrid-architecture.md)
 * [ADR-002: 閘道器中的 IT/OT 雙軌通訊協定轉換](./decisions/ADR-002-it-ot-protocol-translation.md)
 * [ADR-003: 邊緣自洽的戰情室與人機防呆機制](decisions/ADR-003-edge-autonomous-dashboard.md)
+* [ADR-004: 統一 OT 資料聚合於 Kernel 層](decisions/ADR-004-unified-ot-aggregation.md)
 * [POSTMORTEM-001: 系統規模對齊與 Kernel Deadlock 事件](decisions/POSTMORTEM-001-kernel-deadlock.md)
