@@ -1,7 +1,7 @@
 # 1. 定義要編譯的物件
 # obj-m 意思是把這個物件編成 module (不是編成核心的一部分)
 # 注意路徑：我們的 .c 檔在 src/ 資料夾裡
-obj-m += src/mock_sensor.o
+obj-m += src/mock_elc_core.o
 
 # 2. 定義核心原始碼的位置
 # uname -r 會自動抓你現在 Debian 的版本 (例如 6.1.0-rpi4)

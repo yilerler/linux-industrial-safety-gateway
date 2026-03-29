@@ -1,255 +1,148 @@
 const fs = require('fs');
 const path = require('path');
 const ioctl = require('ioctl-napi');
-
-// --- [NEW] 伺服器模組引入 (Server Modules) ---
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const http = require('http');
 
-// 建立 Express 應用程式與 HTTP 伺服器
+// --- 1. 建立 Web 與 WebSocket 伺服器 (IT Layer) ---
 const app = express();
 const server = http.createServer(app);
-
-// 設定靜態檔案託管：將 public 資料夾對外開放
-// 這樣當我們連線到 http://localhost:3000 時，就能看到 index.html
 app.use(express.static(path.join(__dirname, 'public')));
-
-// 建立 WebSocket 伺服器，並綁定到剛剛的 HTTP 伺服器上
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', function connection(ws) {
-  console.log('🌐 [WebUI] A new dashboard client connected!');
-  
-  // 當收到前端傳來的訊息時（目前雖然用不到，但保留擴充性）
-  ws.on('message', function message(data) {
-    console.log('🌐 [WebUI] received: %s', data);
-  });
-
-  ws.on('close', () => {
-    console.log('🌐 [WebUI] Dashboard client disconnected.');
-  });
+    console.log('🌐 [WebUI] A new dashboard client connected!');
+    ws.on('close', () => console.log('🌐 [WebUI] Dashboard client disconnected.'));
 });
 
-// 啟動伺服器，監聽 3000 port
 const PORT = 3000;
 server.listen(PORT, () => {
     console.log(`🚀 [System] Edge Dashboard Server is running on http://localhost:${PORT}`);
 });
 
-// --- 1. 定義合約 (Contract Definition) ---
-// 必須跟 kernel/include/sensor_ioctl.h 完全一致
-const SENSOR_MAGIC = 'S'.charCodeAt(0); // 'S' 的 ASCII 碼 (83)
+// --- 2. 定義跨層合約 (Contract Definition) ---
+const SENSOR_MAGIC = 'S'.charCodeAt(0);
 const COMMAND_NR = 1;
 
-// 定義資料結構的大小 (C語言 struct sensor_data)
-// unsigned int timestamp (4 bytes)
-// int distance_mm (4 bytes)
-// int status_code (4 bytes)
-const DATA_SIZE = 12; 
+// ⚠️ 核心升級：精準對齊 Kernel 的 24 Bytes (packed) 暫存器地圖
+const DATA_SIZE = 24; 
 
-// --- 2. 實作 IOCTL 號碼計算機 (System Call Magic) ---
-// Linux IOCTL 號碼產生公式：
-// Bits 31-30: 方向 (Read = 2)
-// Bits 29-16: 資料大小
-// Bits 15-8 : Magic Number (Type)
-// Bits 7-0  : 序號 (Nr)
-const _IOC_NRBITS = 8;
-const _IOC_TYPEBITS = 8;
-const _IOC_SIZEBITS = 14;
-const _IOC_DIRBITS = 2;
-
+// --- IOCTL 號碼計算機 ---
+const _IOC_NRBITS = 8, _IOC_TYPEBITS = 8, _IOC_SIZEBITS = 14, _IOC_DIRBITS = 2;
 const _IOC_NRSHIFT = 0;
 const _IOC_TYPESHIFT = _IOC_NRSHIFT + _IOC_NRBITS;
 const _IOC_SIZESHIFT = _IOC_TYPESHIFT + _IOC_TYPEBITS;
 const _IOC_DIRSHIFT = _IOC_SIZESHIFT + _IOC_SIZEBITS;
-
-const _IOC_READ = 2; // _IOR
+const _IOC_READ = 2;
 
 function _IOR(type, nr, size) {
-    return (_IOC_READ << _IOC_DIRSHIFT) |
-           (size << _IOC_SIZESHIFT) |
-           (type << _IOC_TYPESHIFT) |
-           (nr << _IOC_NRSHIFT);
+    return (_IOC_READ << _IOC_DIRSHIFT) | (size << _IOC_SIZESHIFT) | (type << _IOC_TYPESHIFT) | (nr << _IOC_NRSHIFT);
 }
 
-// 計算出跟 Kernel 一模一樣的指令碼
 const IOCTL_GET_DATA = _IOR(SENSOR_MAGIC, COMMAND_NR, DATA_SIZE);
-
 console.log(`[System] IOCTL Command Code Calculated: 0x${IOCTL_GET_DATA.toString(16)}`);
 
-// --- 3. 連接驅動 (Driver Interface) ---
-const DEVICE_PATH = '/dev/mock_sensor';
+// --- 3. 連接底層驅動 (Driver Interface) ---
+const DEVICE_PATH = '/dev/mock_elc'; // ⚠️ 注意：對應新的設備名稱
 let fd = null;
 
 try {
-    // 打開通往一樓(Kernel)的門
-    // 'r+' 代表讀寫模式 (雖然我們只讀，但 ioctl 通常需要這種權限)
     fd = fs.openSync(DEVICE_PATH, 'r+');
     console.log(`[System] Device ${DEVICE_PATH} opened successfully (fd=${fd})`);
 } catch (err) {
-    console.error(`[Error] Failed to open ${DEVICE_PATH}. Are you root? Is the driver loaded?`);
-    console.error(err.message);
+    console.error(`[Error] Failed to open ${DEVICE_PATH}. Did you load the mock_elc_core module?`);
     process.exit(1);
 }
 
-// --- 定義指令 ---
-const IOCTL_SET_MOCK_DISTANCE = _IOR(SENSOR_MAGIC, 2, 4); // 保留這個定義，雖然我們這回合沒用到，但它是合約的一部分
-
-// 準備一個 12 bytes 的空箱子 (保留)
-const buffer = Buffer.alloc(DATA_SIZE); 
+// 準備一個 24 bytes 的空箱子，用來接 Kernel 丟上來的記憶體區塊
+const buffer = Buffer.alloc(DATA_SIZE);
 
 // --- 4. 實作 OT 層工業通訊協定 (Hex Protocol Serialization) ---
-// 封包格式：[Header] [Command] [Distance_H] [Distance_L] [Status] [Checksum]
-// 總長度：6 Bytes
-function encodeHexProtocol(distance_mm, status_str) {
-    // 建立一個 6 bytes 的乾淨緩衝區
+function encodeHexProtocol(distance_mm, status_code) {
     const txBuffer = Buffer.alloc(6);
-    
-    // Byte 0: Header (標頭，假設我們定義 0xAA 為工業標準開頭)
-    txBuffer.writeUInt8(0xAA, 0);
-    
-    // Byte 1: Command (指令碼，0x01 代表安全狀態回報)
-    txBuffer.writeUInt8(0x01, 1);
-    
-    // Byte 2-3: Distance (距離，使用 16-bit Big Endian 格式)
-    // 限制最大值防溢位 (0~65535)
+    txBuffer.writeUInt8(0xAA, 0); // Header
+    txBuffer.writeUInt8(0x01, 1); // Command ID
     const safeDistance = Math.min(Math.max(0, distance_mm), 65535);
     txBuffer.writeUInt16BE(safeDistance, 2); 
+    txBuffer.writeUInt8(status_code, 4); // Status: 0=NORMAL, 1=EMERGENCY
     
-    // Byte 4: Status (狀態碼，0x00=正常, 0x01=急停)
-    const statusCode = (status_str === "EMERGENCY_STOP") ? 0x01 : 0x00;
-    txBuffer.writeUInt8(statusCode, 4);
-    
-    // Byte 5: Checksum (檢查碼，工業通訊防呆機制)
-    // 算法：前面 5 個 Byte 的加總，取最後 8 個 bit ( & 0xFF )
+    // Checksum (前 5 bytes 加總取 8-bit)
     let checksum = 0;
-    for (let i = 0; i < 5; i++) {
-        checksum += txBuffer.readUInt8(i);
-    }
+    for (let i = 0; i < 5; i++) checksum += txBuffer.readUInt8(i);
     txBuffer.writeUInt8(checksum & 0xFF, 5);
-    
     return txBuffer;
 }
 
-// 輔助函式：把 Buffer 轉成漂亮的大寫 Hex 字串，方便終端機展示
 function formatHexString(buffer) {
     return [...buffer].map(b => '0x' + b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
 }
 
-// --- 模擬次要感測器 (User Space 的業務邏輯) ---
-function readAirQuality() {
-    return Math.floor(Math.random() * 40) + 10; // PM2.5 (10~50)
-}
-
-function readNoiseLevel() {
-    return Math.floor(Math.random() * 50) + 40; // 噪音 (40~90dB)
-}
-
-function readRFID() {
-    if (Math.random() > 0.9) { // 10% 機率有人刷卡
-        return `CARD_${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
-    }
-    return "NO_CARD";
-}
-
-// --- 5. 業務迴圈 (Business Loop) 系統狀態聚合 (System Aggregation) ---
-
+// --- 5. 業務迴圈 (Pure Middleware Translator) ---
 const aggregationTimer = setInterval(() => {
     try {
-        // 1. 讀取高優先級 Kernel 數據 (電子圍籬)
+        // 1. 向 Kernel (Modbus Engine) 發起輪詢
         const ret = ioctl(fd, IOCTL_GET_DATA, buffer);
-        let fenceData = null;
-
-        if (ret === 0) {
-            fenceData = {
-                distance_mm: buffer.readInt32LE(4),
-                status: buffer.readInt32LE(8) === 1 ? "EMERGENCY_STOP" : "NORMAL"
-            };
-        }
-
-        // 2. 讀取低優先級 User Space 數據 (空品、噪音、門禁)
-        const airQuality = readAirQuality();
-        const noiseLevel = readNoiseLevel();
-        const accessCard = readRFID();
-
-        // 3. 聚合成最終的戰情板 JSON (IoT Payload)
-        const systemPayload = {
-            timestamp: new Date().toISOString(),
-            safety_subsystem: fenceData,
-            environment_subsystem: {
-                pm25: airQuality,
-                noise_db: noiseLevel
-            },
-            access_subsystem: {
-                last_scan: accessCard
-            }
-        };
-
-        // --- [NEW] 將 JSON 數據推播給所有連接的 Web UI ---
-        const jsonString = JSON.stringify(systemPayload);
         
-        wss.clients.forEach(function each(client) {
-            // 檢查 client 的狀態是否為開啟 (OPEN)
-            if (client.readyState === 1) { 
-                client.send(jsonString);
-            }
-        });
+        if (ret === 0) {
+            // 2. 🗄️ 絕對精準的記憶體映射解碼 (Deserialization)
+            // 完全依賴 C struct 的 byte offset
+            const distance = buffer.readInt32LE(4);
+            const status_code = buffer.readInt32LE(8);
+            const pm25_val = buffer.readInt32LE(12);
+            const noise_val = buffer.readInt32LE(16);
+            const rfid_raw = buffer.readInt32LE(20);
 
-        // 4. 業務邏輯輸出 (取代了原本單純的 console.log)
-        // --- 核心展示：IT vs OT 雙軌輸出 ---
-        //console.log(`\n======================================================`);
+            const status_str = status_code === 1 ? "EMERGENCY_STOP" : "NORMAL";
+            const rfid_str = rfid_raw > 0 ? `CARD_${rfid_raw.toString().padStart(4, '0')}` : "NO_CARD";
 
-        // 【軌道二：OT 韌體層 (工業 Hex 封包)】 - 保留 Hex 輸出以展示雙軌能力
-        if (fenceData) {
-            const hexBuffer = encodeHexProtocol(fenceData.distance_mm, fenceData.status);
+            // 3. 轉化為標準 JSON Payload (IT 軌道)
+            const systemPayload = {
+                timestamp: new Date().toISOString(),
+                safety_subsystem: {
+                    distance_mm: distance,
+                    status: status_str
+                },
+                environment_subsystem: {
+                    pm25: pm25_val,
+                    noise_db: noise_val
+                },
+                access_subsystem: {
+                    last_scan: rfid_str
+                }
+            };
+
+            // 4. IT 軌道推播：推給所有連接的 WebSocket (戰情室)
+            const jsonString = JSON.stringify(systemPayload);
+            wss.clients.forEach(client => {
+                if (client.readyState === 1) client.send(jsonString);
+            });
+
+            // 5. OT 軌道推播：翻譯成 Hex 封包並印出 (模擬向下派發)
+            const hexBuffer = encodeHexProtocol(distance, status_code);
             const hexString = formatHexString(hexBuffer);
-            // 只在緊急停止或特定條件下印出 Log，避免洗頻太快
-            if(fenceData.status === "EMERGENCY_STOP"){
-                 console.log(`🚨 UART TX -> [ ${hexString} ] (EMERGENCY KILLED)`);
+            
+            // 終端機業務邏輯展示 (取代原本雜亂的印出)
+            if (status_str === "EMERGENCY_STOP") {
+                console.error(`🚨 [ALARM] MOTOR OFFLINE! OT-UART TX -> [ ${hexString} ]`);
+            } else if (rfid_raw > 0) {
+                console.log(`🔑 [ACCESS] Processing login for ${rfid_str}...`);
             }
         }
-
-        //console.log(`======================================================`);
-
-        // 依據打包好的數據，做出業務反應
-        if (fenceData && fenceData.status === "EMERGENCY_STOP") {
-            console.error(`🚨 [ALARM] SYSTEM TRIGGERED SIREN! MOTOR OFFLINE!`);
-        } else if (accessCard !== "NO_CARD") {
-            console.log(`🔑 [ACCESS] Processing login for ${accessCard}...`);
-        }
-
-        // 依據打包好的數據，做出業務反應
-        if (fenceData && fenceData.status === "EMERGENCY_STOP") {
-            console.error(`🚨 [ALARM] SYSTEM TRIGGERED SIREN! MOTOR OFFLINE!`);
-        } else if (accessCard !== "NO_CARD") {
-            console.log(`🔑 [ACCESS] Processing login for ${accessCard}...`);
-        }
-
     } catch (e) {
         console.error(`[Error] Aggregation failed:`, e.message);
     }
-}, 200); // 每秒更新5次戰情板數據
+}, 200); // 每秒 5 次向 Kernel 輪詢
 
-// --- 優雅退出 (Graceful Shutdown) 徹底清理資源 ---
+// --- 優雅退出 (Graceful Shutdown) ---
 process.on('SIGINT', () => {
     console.log('\n[System] SIGINT (Ctrl+C) received. Initiating graceful shutdown...');
-    
-    // --- [新增] 1. 先停止業務迴圈，不再發起新的 ioctl 請求 ---
     clearInterval(aggregationTimer);
     console.log('[System] Aggregation loop stopped.');
+    
+    wss.close(() => console.log('[System] WebSocket server closed.'));
+    server.close(() => console.log('[System] HTTP server closed.'));
 
-    // 2. 關閉 WebSocket 伺服器
-    if (typeof wss !== 'undefined') {
-        wss.close(() => console.log('[System] WebSocket server closed.'));
-    }
-
-    // 3. 關閉 HTTP 伺服器
-    if (typeof server !== 'undefined') {
-        server.close(() => console.log('[System] HTTP server closed.'));
-    }
-
-    // 4. 關閉硬體檔案描述符 (這時候關閉就絕對安全了)
     if (fd !== null) {
         try {
             fs.closeSync(fd);
@@ -258,12 +151,5 @@ process.on('SIGINT', () => {
             console.error(`[Error] Failed to close device: ${e.message}`);
         }
     }
-
-    // 防呆與退出機制保持不變...
-    setTimeout(() => {
-        console.error('[System] Shutdown took too long. Forcing exit.');
-        process.exit(1);
-    }, 3000);
-
     setTimeout(() => process.exit(0), 500); 
 });
