@@ -26,10 +26,10 @@ flowchart TD
         ELC[Modbus 輪詢引擎 & DSP<br>工安急停狀態機]:::kernel
         RegMap[(統一暫存器地圖<br>Packed Register Map)]:::kernel
         
-        Sensors -->|實體 I/O| HAL
-        HAL -->|原始數據| ELC
-        ELC -->|乾淨數據| RegMap
-        ELC -.->|絕對優先權: 強制斷電| Motor
+        Sensors -- "實體 I/O" --> HAL
+        HAL -- "原始數據" --> ELC
+        ELC -- "乾淨數據" --> RegMap
+        ELC -. "絕對優先權: 強制斷電" .-> Motor
     end
 
     subgraph Contract["⚖️ 系統邊界 (System Boundary)"]
@@ -41,8 +41,8 @@ flowchart TD
         Translator[通訊協議翻譯官<br>Protocol Translator]:::user
         WSServer[本地伺服器<br>Express + WebSocket]:::user
 
-        RegMap -->|O(1) 深拷貝| IOCTL
-        IOCTL -->|24 Bytes 記憶體映射| Adapter
+        RegMap -- "O(1) 深拷貝" --> IOCTL
+        IOCTL -- "24 Bytes 記憶體映射" --> Adapter
         Adapter --> Translator
         Adapter --> WSServer
     end
@@ -52,9 +52,9 @@ flowchart TD
         OT[📠 傳統控制器<br>OT System / PLC]:::external
         UI[💻 戰情室 UI<br>Graceful Degradation]:::external
 
-        Translator -->|JSON 大數據<br>~190 Bytes| IT
-        Translator -->|Hex + Checksum<br>6 Bytes| OT
-        WSServer <-->|LAN 即時推播<br>Watchdog 監控| UI
+        Translator -- "JSON 大數據" --> IT
+        Translator -- "Hex + Checksum" --> OT
+        WSServer <--> UI
     end
 ```
 
