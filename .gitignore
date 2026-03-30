@@ -1,1 +1,17 @@
+# --- Node.js 依賴與日誌 ---
 node_modules/
+npm-debug.log
+
+# --- C 語言與 Linux Kernel 編譯產物 ---
+*.o
+*.ko
+*.mod.c
+*.mod
+*.symvers
+*.order
+.*.cmd
+Module.symvers
+modules.order
+
+# --- 測試執行檔 ---
+tests/elc_diag
