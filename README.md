@@ -129,6 +129,6 @@ sudo ./elc_diag # 驗證 SMP 併發下的 O(1) 深拷貝效能與零死鎖防禦
 * [ADR-002: 閘道器中的 IT/OT 雙軌通訊協定轉換](./decisions/ADR-002-it-ot-protocol-translation.md)
 * [ADR-003: 邊緣自洽的戰情室與人機防呆機制](decisions/ADR-003-edge-autonomous-dashboard.md)
 * [ADR-004: 統一 OT 資料聚合於 Kernel 層](decisions/ADR-004-unified-ot-aggregation.md)
-* [ADR-005: 實作深拷貝 $O(1)$ 與 SMP 併發壓力測試標準]（decisions/ADR-005-smp-stress-test-and-o1-deepcopy.md）
+* [ADR-005: 實作深拷貝O(1)與 SMP 併發壓力測試標準](decisions/ADR-005-smp-stress-test-and-o1-deepcopy.md)
 * [POSTMORTEM-001: 系統規模對齊與 Kernel Deadlock 事件](decisions/POSTMORTEM-001-kernel-deadlock.md)
 * [POSTMORTEM-002: 物理 I/O 阻塞盲點與 Kernel Thread 遷移藍圖](decisions/POSTMORTEM-002-io-blocking-and-kthread-migration.md)
