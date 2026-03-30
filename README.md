@@ -75,6 +75,8 @@ flowchart TD
 ├── kernel/             # Linux LKM 驅動原始碼
 │   ├── include/        # 跨層共享的 IOCTL 暫存器合約定義
 │   └── src/            # mock_elc_core.c (HAL、保命機制、自旋鎖與狀態機)
+├── tests/              # 系統診斷與壓力測試工具
+│   └── elc_diag.c      # Pthreads 多核心併發壓測程式
 └── user/               # Node.js 邊緣運算層
     ├── public/         # Vanilla JS/CSS 打造之高對比工業戰情室 UI
     └── adapter.js      # 純粹中介層：記憶體映射解析、API 轉發與 Web 伺服器
@@ -114,6 +116,12 @@ cd user
 npm install
 sudo node adapter.js # 備註：此處需 sudo 權限以存取 /dev/mock_elc 字元設備。量產環境將透過 udev rules 配置權限以符合最小權限原則。
 ```
+**3. 執行極限壓力測試 (Stress Test)**
+```bash
+cd tests
+gcc elc_diag.c -o elc_diag -pthread
+sudo ./elc_diag # 驗證 SMP 併發下的 O(1) 深拷貝效能與零死鎖防禦
+```
 
 ## 📜 架構決策紀錄 (ADRs)
 詳細的系統設計與技術選型考量，請參閱：
@@ -121,4 +129,6 @@ sudo node adapter.js # 備註：此處需 sudo 權限以存取 /dev/mock_elc 字
 * [ADR-002: 閘道器中的 IT/OT 雙軌通訊協定轉換](./decisions/ADR-002-it-ot-protocol-translation.md)
 * [ADR-003: 邊緣自洽的戰情室與人機防呆機制](decisions/ADR-003-edge-autonomous-dashboard.md)
 * [ADR-004: 統一 OT 資料聚合於 Kernel 層](decisions/ADR-004-unified-ot-aggregation.md)
+* [ADR-005: 實作深拷貝 $O(1)$ 與 SMP 併發壓力測試標準]（decisions/ADR-005-smp-stress-test-and-o1-deepcopy.md）
 * [POSTMORTEM-001: 系統規模對齊與 Kernel Deadlock 事件](decisions/POSTMORTEM-001-kernel-deadlock.md)
+* [POSTMORTEM-002: 物理 I/O 阻塞盲點與 Kernel Thread 遷移藍圖](decisions/POSTMORTEM-002-io-blocking-and-kthread-migration.md)
