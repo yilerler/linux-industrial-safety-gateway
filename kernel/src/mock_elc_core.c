@@ -1,3 +1,4 @@
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
@@ -187,7 +188,13 @@ static int __init elc_init(void) {
     cdev_init(&my_dev->cdev, &fops);
     if ((ret = cdev_add(&my_dev->cdev, dev_num, 1)) < 0) goto err_cdev;
 
-    my_dev->dev_class = class_create(THIS_MODULE, CLASS_NAME);
+    // 建立 Device Class (相容新舊版 Kernel API)
+    #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
+        my_dev->dev_class = class_create(CLASS_NAME);
+    #else
+        my_dev->dev_class = class_create(THIS_MODULE, CLASS_NAME);
+    #endif
+    
     if (IS_ERR(my_dev->dev_class)) { ret = PTR_ERR(my_dev->dev_class); goto err_class; }
 
     my_dev->dev_device = device_create(my_dev->dev_class, NULL, dev_num, NULL, DEVICE_NAME);
