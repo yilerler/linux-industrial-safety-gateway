@@ -1,3 +1,11 @@
+> [!WARNING]
+> ## 🛑 [DEPRECATED] 專案已正式遷移與重構
+> 本專案 (V1.0 - V4.3) 探討了基於 Node.js 的工業感測器閘道器實作。但在極限壓測下，我們發現將硬體防禦與業務邏輯混雜於 User Space 的「軟即時 (Soft Real-Time)」架構，無法滿足工業級微秒級的防禦需求。
+> 
+> **本專案已停止維護，並重構升級為全新的 Linux Kernel 基礎設施堆疊：**
+> 👉 **請前往新專案：[hard-realtime-edge-stack](https://github.com/yilerler/hard-realtime-edge-stack)** > *(新專案展示了 IT/OT 解耦、O(1) 深拷貝、Spinlock 鎖競爭防禦與 72 小時 SRE 燒機驗證)*
+
+---
 # 🏭 Industrial IT/OT Safety Gateway (基於 Linux Kernel 之工業級安全閘道器)
 
 > **一句話簡介：** 專為 **工業人機協作 (HRC)** 與 **高可靠度邊緣運算 (Edge Computing)** 設計的軟體定義閘道器 (Software-Defined Gateway) 與 **邊緣邏輯控制器 (Edge Logic Controller, ELC)**。
